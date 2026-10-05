@@ -4,7 +4,7 @@ Fedora AArch64 image publication for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675
 
 **Current status:** release infrastructure is being prepared. No Fedora system
 image has been published or accepted for tablet boot. The first target is a
-Fedora Rawhide console system, with independent ESP and Linux filesystem images.
+Fedora Rawhide Core development system, with independent ESP and Linux filesystem images.
 
 | Resource | Location |
 |---|---|
@@ -26,3 +26,15 @@ forked or rebuilt KDE application variants are published. Graphical admission
 remains blocked by incompatible Python payloads under the Uke target policy.
 
 This independent community project is not an official Fedora or Xiaomi product.
+
+The Core candidate profile uses ESP32-S3 HID shell input on VT2 and CDC journal
+output with the tablet acting as USB host. It opens an explicit local development
+root shell; this profile is unsuitable as a general-purpose security default.
+The existing bridge firmware, Uke USB/UFS DT support, UEFI handoff and measured
+partition geometry still require independent acceptance. Construction starts
+with `ukelinux.sh` in the workspace; see the [Core image guide](https://github.com/MCC45TR/uke-fedora-builder/blob/main/docs/IMAGES.md).
+
+The [first local filesystem candidate](https://github.com/MCC45TR/uke-fedora-builder/blob/main/reports/CORE-FILESYSTEM-2026-10-05.json)
+passed complete root/initramfs, EXT4/ESP and UKI byte-match checks. Its kernel
+report retains missing enabled USB/UFS and static RAM; no image assets or tablet
+boot acceptance are published.
