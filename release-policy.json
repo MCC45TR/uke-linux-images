@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "device": "uke",
+  "soc": "SM7675",
+  "architecture": "aarch64",
+  "first_target": "fedora-rawhide-console",
+  "status": "prerequisites-under-review",
+  "published_images": [],
+  "partition_roles": {"esp": "uke_esp", "linux": "uke_linux"},
+  "geometry_verified": false,
+  "uefi_handoff_verified": false,
+  "boot_tested": false,
+  "hardware_tested": false,
+  "required_release_records": ["SHA256SUMS", "source-and-package-manifest", "partition-contract", "validation-report", "installation-and-rollback"],
+  "automatic_publication_enabled": false
+}
