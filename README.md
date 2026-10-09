@@ -6,6 +6,19 @@ Fedora AArch64 image publication for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675
 image has been published or accepted for tablet boot. The first target is a
 Fedora Rawhide Core development system, with independent ESP and Linux filesystem images.
 
+A separate stock-ABL development route prepares `fedora_boot.img` for `boot_b`
+and `system.img` for an independently prepared GPT `linux` partition. It uses a
+root-capable built-in initramfs, runtime stock-DT adaptation and a local TTY1
+screen candidate while Aloha remains under development. Run
+`./ukelinux.sh --build boot-pair --distro=fedora --help` from the workspace.
+The [October 9 validation record](https://github.com/MCC45TR/uke-fedora-builder/blob/test/stock-abl-core-pair/reports/FEDORA-BOOT-PAIR-2026-10-09.json)
+qualifies the local pair: Image/modules, EXT4/SELinux, full sparse decoding,
+generic VM real-root/TTY execution and both wrong-root rejection cases passed.
+The 96 MiB boot image and 556.23 MiB sparse system image (3 GiB logical EXT4)
+are a coordinated owner-test candidate. Actual tablet boot and screen output
+remain untested. This route currently has no published image assets. It requires
+no ESP and performs no partition creation, flashing or slot activation.
+
 | Resource | Location |
 |---|---|
 | Published image assets | [GitHub Releases](https://github.com/MCC45TR/uke-linux-images/releases) |
@@ -27,7 +40,7 @@ remains blocked by incompatible Python payloads under the Uke target policy.
 
 This independent community project is not an official Fedora or Xiaomi product.
 
-The Core candidate profile uses ESP32-S3 HID shell input on VT2 and CDC journal
+The separate UEFI Core profile uses ESP32-S3 HID shell input on VT2 and CDC journal
 output with the tablet acting as USB host. It opens an explicit local development
 root shell; this profile is unsuitable as a general-purpose security default.
 The existing bridge firmware, Uke USB/UFS DT support, UEFI handoff and measured
