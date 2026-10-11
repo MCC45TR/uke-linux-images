@@ -4,8 +4,17 @@
   "soc": "SM7675",
   "architecture": "aarch64",
   "first_target": "fedora-rawhide-core",
-  "status": "local-filesystem-candidate-verified",
-  "published_images": [],
+  "status": "manual-prebuild-test-publication",
+  "published_images": [
+    {
+      "tag": "prebuild-fedora-core-20261011-copr1.15",
+      "channel": "prebuild-test",
+      "prerelease": true,
+      "url": "https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261011-copr1.15",
+      "root_image_physical_flash_tested": false,
+      "boot_image_ram_tested": true
+    }
+  ],
   "partition_roles": {
     "esp": "uke_esp",
     "linux": "uke_linux"
@@ -23,14 +32,20 @@
   ],
   "automatic_publication_enabled": false,
   "stock_abl_core_development": {
-    "status": "host-and-generic-VM-validated-owner-test-candidate",
+    "status": "signed-1.15-kernel-RAM-tested-clean-root-generic-VM-tested",
     "validation_record": "https://github.com/MCC45TR/uke-fedora-builder/blob/test/stock-abl-core-pair/reports/FEDORA-BOOT-PAIR-2026-10-09.json",
-    "candidate": "pair-03ea9569c96dcb08",
+    "candidate": "copr24-ramfs-20261011",
     "qemu_tested": true,
-    "outputs": ["fedora_boot.img", "system.img"],
-    "partition_targets": ["boot_b", "linux"],
+    "outputs": [
+      "fedora_boot.img",
+      "system.img"
+    ],
+    "partition_targets": [
+      "boot_b",
+      "linux"
+    ],
     "linux_partition_prerequisite": "independently-prepared-GPT-linux-at-least-3-GiB",
-    "root_selector": "image-UUID-and-PARTNAME-linux",
+    "root_selector": "unique-PARTNAME-linux-EXT4",
     "local_console": "TTY1-simplefb-candidate",
     "usb_diagnostics": "CDC-ACM-peripheral",
     "esp_required": false,
@@ -38,7 +53,11 @@
     "flashing_automated": false,
     "boot_tested": false,
     "hardware_tested": false,
-    "published_assets": []
+    "published_assets": [
+      "fedora_boot.img",
+      "system.img"
+    ],
+    "ram_boot_tested": true
   },
   "debug_profile": {
     "tablet_usb_role": "host",
