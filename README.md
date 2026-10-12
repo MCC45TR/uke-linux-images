@@ -2,16 +2,22 @@
 
 Fedora AArch64 image publication for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675).
 
-**Current status:** the [Fedora Core prebuild test with signed kernel 1.17](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261012-copr1.17)
-provides boot/root images, checksums, source/package identities and installation
-limits. The exact boot image reaches the owner's existing EXT4 root by RAM boot;
-the clean released root image has only host and generic VM qualification.
-The exact boot image has two RAM starts and a full boot_b write/readback while
-stock A remains selected. Firmware DRM supplies software scanout and paired
-normal brightness writes have matching readbacks; optical confirmation and
-native Adreno acceleration remain open. This is an experimental console
-system. A private original Fedora KDE copy is undergoing physical installation;
-its separate sanitized public image remains under validation.
+**Current status:** [Fedora Core](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261012-copr1.17)
+and [original Fedora KDE](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-kde-20261012-copr1.17)
+are published as prebuild tests with signed kernel 1.17, matched boot/root
+assets, checksums and installation/rollback limits. All eight KDE server asset
+digests and sizes match the admitted local files. Its clean 786-package root
+passes full EXT4/sparse readback, SELinux, original-dependency and privacy gates;
+this exact public filesystem has not been flashed or booted on the tablet.
+
+The different private owner root displays original Fedora Plasma/KWin 6.8.0
+through firmware DRM and llvmpipe after a signed Mesa correction. Camera
+observations confirm the desktop and manual rotation/restoration. Native Adreno,
+touch, automatic rotation/brightness and battery telemetry remain unavailable.
+Paired normal brightness writes have matching readbacks; calibrated optical
+response remains open. The 1.17 boot has two RAM starts and full boot_b readback;
+later private testing uses a matched 1.18 RAM tuple. Stock A remains selected,
+normal slot-B startup remains untested, and the consistent Core rollback is kept.
 
 A separate stock-ABL development route prepares `fedora_boot.img` for `boot_b`
 and `system.img` for an independently prepared GPT `linux` partition. It uses a

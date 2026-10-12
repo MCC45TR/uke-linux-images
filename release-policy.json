@@ -23,6 +23,20 @@
       "boot_image_ram_tested": true,
       "boot_b_full_readback_verified": true,
       "normal_slot_B_tested": false
+    },
+    {
+      "tag": "prebuild-fedora-kde-20261012-copr1.17",
+      "channel": "prebuild-test",
+      "prerelease": true,
+      "url": "https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-kde-20261012-copr1.17",
+      "installed_package_count": 786,
+      "server_asset_hashes_and_sizes_verified": true,
+      "root_image_host_readback_verified": true,
+      "root_image_physical_flash_tested": false,
+      "root_image_physical_boot_tested": false,
+      "boot_image_ram_tested": true,
+      "boot_b_full_readback_verified": true,
+      "normal_slot_B_tested": false
     }
   ],
   "partition_roles": {
