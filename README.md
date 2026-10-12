@@ -2,11 +2,16 @@
 
 Fedora AArch64 image publication for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675).
 
-**Current status:** the [Fedora Core prebuild test with signed kernel 1.15](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261011-copr1.15)
+**Current status:** the [Fedora Core prebuild test with signed kernel 1.17](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261012-copr1.17)
 provides boot/root images, checksums, source/package identities and installation
 limits. The exact boot image reaches the owner's existing EXT4 root by RAM boot;
 the clean released root image has only host and generic VM qualification.
-This is an experimental console system. An original Fedora KDE image is in preparation.
+The exact boot image has two RAM starts and a full boot_b write/readback while
+stock A remains selected. Firmware DRM supplies software scanout and paired
+normal brightness writes have matching readbacks; optical confirmation and
+native Adreno acceleration remain open. This is an experimental console
+system. A private original Fedora KDE copy is undergoing physical installation;
+its separate sanitized public image remains under validation.
 
 A separate stock-ABL development route prepares `fedora_boot.img` for `boot_b`
 and `system.img` for an independently prepared GPT `linux` partition. It uses a

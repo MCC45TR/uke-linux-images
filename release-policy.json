@@ -13,6 +13,16 @@
       "url": "https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261011-copr1.15",
       "root_image_physical_flash_tested": false,
       "boot_image_ram_tested": true
+    },
+    {
+      "tag": "prebuild-fedora-core-20261012-copr1.17",
+      "channel": "prebuild-test",
+      "prerelease": true,
+      "url": "https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261012-copr1.17",
+      "root_image_physical_flash_tested": false,
+      "boot_image_ram_tested": true,
+      "boot_b_full_readback_verified": true,
+      "normal_slot_B_tested": false
     }
   ],
   "partition_roles": {
@@ -32,9 +42,9 @@
   ],
   "automatic_publication_enabled": false,
   "stock_abl_core_development": {
-    "status": "signed-1.15-kernel-RAM-tested-clean-root-generic-VM-tested",
+    "status": "signed-1.17-two-RAM-starts-full-boot_b-readback-clean-root-VM-only",
     "validation_record": "https://github.com/MCC45TR/uke-fedora-builder/blob/test/stock-abl-core-pair/reports/FEDORA-BOOT-PAIR-2026-10-09.json",
-    "candidate": "copr24-ramfs-20261011",
+    "candidate": "copr25-drm-ramfs-20261012",
     "qemu_tested": true,
     "outputs": [
       "fedora_boot.img",
@@ -46,7 +56,7 @@
     ],
     "linux_partition_prerequisite": "independently-prepared-GPT-linux-at-least-3-GiB",
     "root_selector": "unique-PARTNAME-linux-EXT4",
-    "local_console": "TTY1-simplefb-candidate",
+    "local_console": "TTY1-firmware-simpledrm-software-scanout",
     "usb_diagnostics": "CDC-ACM-peripheral",
     "esp_required": false,
     "partition_creation_automated": false,
