@@ -60,3 +60,5 @@ Host, VM and tablet results are listed separately. Nabu partition sizes, boot
 binaries and calibration are not used as Uke inputs.
 
 This is an independent community project, not an official Fedora or Xiaomi product.
+
+Documentation and release notes follow the [report style](CONTRIBUTING.md).
