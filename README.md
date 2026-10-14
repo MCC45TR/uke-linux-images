@@ -14,8 +14,10 @@ installation and rollback notes before testing.
 A separate development installation reaches the console and software KDE
 desktop, with Wi-Fi SSH and battery readings. This is not the same filesystem
 as the public images. Finger input and ten simultaneous touch contacts worked
-in the 14 October tablet test. GPU acceleration, Bluetooth, audio and USB host
-mode remain incomplete. See the [current hardware table](https://github.com/MCC45TR/uke-linux#hardware-support).
+in the 14 October tablet test. Power and volume buttons and manual backlight
+control also worked. Backlight adjustment is linear and difficult to use
+comfortably; a logarithmic curve is planned. GPU acceleration, Bluetooth, audio
+and USB host mode remain incomplete. See the [current hardware table](https://github.com/MCC45TR/uke-linux#hardware-support).
 
 KDE applications are Fedora's originals. The existing KDE dependencies include
 Python, which conflicts with the project's Python-free tablet policy. A
