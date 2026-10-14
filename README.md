@@ -2,7 +2,7 @@
 
 Fedora AArch64 images for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675).
 
-## Release status — 13 October 2026
+## Project status — 14 October 2026
 
 [Core](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261012-copr1.17)
 and [original Fedora KDE](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-kde-20261012-copr1.17)
@@ -13,7 +13,8 @@ installation and rollback notes before testing.
 
 A separate development installation reaches the console and software KDE
 desktop, with Wi-Fi SSH and battery readings. This is not the same filesystem
-as the public images. Touch, GPU acceleration, Bluetooth, audio and USB host
+as the public images. Finger input and ten simultaneous touch contacts worked
+in the 14 October tablet test. GPU acceleration, Bluetooth, audio and USB host
 mode remain incomplete. See the [current hardware table](https://github.com/MCC45TR/uke-linux#hardware-support).
 
 KDE applications are Fedora's originals. The existing KDE dependencies include
