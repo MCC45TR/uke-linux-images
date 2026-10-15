@@ -2,6 +2,21 @@
 
 Fedora AArch64 images for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675).
 
+## Fedora Rawhide Alpha 1 — 15 October 2026
+
+Alpha 1 is published in the main project:
+[release files and checksums](https://github.com/MCC45TR/uke-linux/releases/tag/fedora-rawhide-alpha-1).
+**Experimental alpha — not suitable for daily use.**
+
+The public boot and root files are rebuilt from the normal Linux 7.2.9 revision
+1.39 software baseline; these exact files have not been booted on the tablet.
+Unapproved OEM firmware, calibration and device identities are excluded. A
+firmware provisioning method is not yet available, so dependent functions may
+be unavailable. The `userdata` boot variant is particularly experimental and
+replacing Android userdata erases Android user data. Installation instructions
+will follow. See the [reporting guide](https://github.com/MCC45TR/uke-linux/blob/main/CONTRIBUTING.md)
+and [current hardware table](https://github.com/MCC45TR/uke-linux#hardware-support).
+
 ## Project status — 14 October 2026
 
 [Core](https://github.com/MCC45TR/uke-linux-images/releases/tag/prebuild-fedora-core-20261012-copr1.17)
@@ -19,10 +34,10 @@ control also worked. Backlight adjustment is linear and difficult to use
 comfortably; a logarithmic curve is planned. GPU acceleration, Bluetooth, audio
 and USB host mode remain incomplete. See the [current hardware table](https://github.com/MCC45TR/uke-linux#hardware-support).
 
-KDE applications are Fedora's originals. The existing KDE dependencies include
-Python, which conflicts with the project's Python-free tablet policy. A
-compliant KDE release is still blocked. Core and early-initramfs checks are
-separate; no KDE application is cloned or rebuilt to change its dependencies.
+KDE applications are Fedora's originals. Unmodified Fedora desktop packages may
+retain their original Python dependencies. This exception does not cover project
+tools, recovery or initramfs payloads. No KDE application is cloned or rebuilt to
+change its dependencies.
 
 ## Images and boot routes
 
