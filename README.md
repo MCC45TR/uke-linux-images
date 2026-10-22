@@ -1,5 +1,7 @@
 # Uke Linux images
 
+23 October 2026: [public source builds and manual installation](https://github.com/MCC45TR/uke-fedora-builder/blob/main/docs/PUBLIC-BUILD.md) are available through `./ukelinux.sh` in the main workspace. This new source workflow has shell checks only; no new image release or physical acceptance is recorded. The dated Alpha artifacts below remain unchanged.
+
 Fedora AArch64 images for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675).
 
 ## Fedora Rawhide Alpha 1 — 15 October 2026
