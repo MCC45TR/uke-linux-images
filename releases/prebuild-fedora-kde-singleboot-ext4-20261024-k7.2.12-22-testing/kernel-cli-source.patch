@@ -1,0 +1,131 @@
+diff --git a/configs/host/build-rules.json b/configs/host/build-rules.json
+index b547c4a..c1d090e 100644
+--- a/configs/host/build-rules.json
++++ b/configs/host/build-rules.json
+@@ -4,7 +4,6 @@
+   "device": "uke",
+   "architecture": "arm64",
+   "minimum_free_gib": 25,
+-  "default_max_jobs": 4,
+   "source_signer": "647F28654894E3BD457199BE38DBBDC86092693E",
+   "fedora_rawhide_images": {
+     "x86_64": "registry.fedoraproject.org/fedora@sha256:f7d3478d02965da40131211c19fb827b4d6e3de0904e9d582a9354af47949c14",
+diff --git a/configs/host/senemos-uke-linux-kernel-mainline.spec b/configs/host/senemos-uke-linux-kernel-mainline.spec
+index d4fc389..130a447 100644
+--- a/configs/host/senemos-uke-linux-kernel-mainline.spec
++++ b/configs/host/senemos-uke-linux-kernel-mainline.spec
+@@ -4,7 +4,7 @@
+ %global _source_filedigest_algorithm 8
+ %global _binary_filedigest_algorithm 8
+ %global krel %{version}-senemos-uke
+-%global _uke_jobs %{?_smp_build_ncpus}%{!?_smp_build_ncpus:4}
++%global _uke_jobs %{?_smp_build_ncpus}%{!?_smp_build_ncpus:%(getconf _NPROCESSORS_ONLN)}
+ %global _uke_out %{_topdir}/kernel-out
+ 
+ Name: senemos-uke-linux-kernel-mainline
+diff --git a/docs/BUILDING.md b/docs/BUILDING.md
+index e46c631..3a6c42f 100644
+--- a/docs/BUILDING.md
++++ b/docs/BUILDING.md
+@@ -31,8 +31,9 @@ it also lists the host-engine and architecture cases that remain untested.
+ 
+ Use `--dry-run` for version/target resolution without installation or compilation,
+ `--jobs N` to set concurrency, and `--offline` after caching signed sources,
+-release metadata and the exact toolchain image. The default limit is the smaller
+-of available CPUs, approximately one worker per 2 GiB available RAM, and four.
++release metadata and the exact toolchain image. Parallelism defaults to the
++available CPU count. `--j4` and `--j16` are equivalent to `--jobs 4` and
++`--jobs 16`; explicit counts are retained without a hidden CPU or RAM clamp.
+ At least 25 GiB free space is required. The script holds a workspace build lock,
+ queues behind other compilers and pauses its own container if a recovery or
+ other native build starts. It never pauses, kills or cleans another build.
+diff --git a/packaging/senemos-uke-linux-kernel-mainline.spec b/packaging/senemos-uke-linux-kernel-mainline.spec
+index b4aa833..3fd7668 100644
+--- a/packaging/senemos-uke-linux-kernel-mainline.spec
++++ b/packaging/senemos-uke-linux-kernel-mainline.spec
+@@ -162,8 +162,7 @@ if test ! -e %{uke_boot_userspace}; then
+ fi
+ test "$(cat %{uke_boot_userspace}/kernel-release)" = '%{krel}'
+ (cd %{uke_boot_userspace}; sha256sum -c base-files.sha256)
+-jobs=%{?_smp_build_ncpus}%{!?_smp_build_ncpus:4}
+-test "$jobs" -le 8 || jobs=8
++jobs=%{?_smp_build_ncpus}%{!?_smp_build_ncpus:%(getconf _NPROCESSORS_ONLN)}
+ g++ %{build_cxxflags} -std=c++20 -Wall -Wextra -Werror -ffile-prefix-map=$PWD=. \
+     touch-runtime/capture/touch-capture.cpp touch-runtime/capture/upstream/nt36532-thp/nvt_touch_core.cpp \
+     -lcrypto -lsystemd -o native-generated/uke-touch-capture %{build_ldflags}
+diff --git a/senemos.sh b/senemos.sh
+index 9be9b82..99e3bac 100755
+--- a/senemos.sh
++++ b/senemos.sh
+@@ -50,7 +50,7 @@ Usage: ./senemos.sh --build VERSION --distro=DISTRO [options]
+   --build VERSION     Explicit version, latest, or its alias lastest
+   --distro DISTRO     Target distribution, independent of the build host
+   --release RELEASE   Target release (Fedora defaults to rawhide)
+-  --jobs N            Positive parallel job limit; defaults to at most four
++  --jobs N, --jN      Positive parallel job count; defaults to available CPUs
+   --dry-run           Resolve and show the plan without installing or building
+   --offline           Require cached release metadata, source and toolchain
+   --test              Validate RPMs, including isolated AArch64 package lifecycle
+@@ -633,6 +633,7 @@ self_test() {
+     reject bash "$ROOT/senemos.sh" --build 99.99.99 --dry-run
+     reject bash "$ROOT/senemos.sh" --unknown
+     ok 'invalid options, path traversal and unimplemented targets'
++    bash "$ROOT/tests/parallel-jobs.sh"
+     mkdir -p "$temporary/profile-fixture/manifests"
+     printf '{"schema_version":1,"version":"7.2.9","patches":[]}\n' > "$temporary/profile-fixture/manifests/linux-7.2.9.json"
+     incomplete_profile_fixture() {
+@@ -751,6 +752,7 @@ while (($#)); do
+         --distro=*) DISTRO=${1#*=}; shift;;
+         --release=*) RELEASE=${1#*=}; shift;;
+         --jobs=*) JOBS=${1#*=}; shift;;
++        --j[0-9]*) JOBS=${1#--j}; shift;;
+         --dry-run) DRY_RUN=1; shift;;
+         --offline) OFFLINE=1; shift;;
+         --test) TEST=1; shift;;
+@@ -778,15 +780,8 @@ architecture=$(uname -m)
+ BASE_IMAGE=$(jq -er --arg a "$architecture" '.fedora_rawhide_images[$a]' "$RULES")
+ WORK=$BUILDER/build/fedora-rawhide/$VERSION
+ ARTIFACTS=$BUILDER/artifacts/fedora-rawhide/$VERSION
+-cpus=$(getconf _NPROCESSORS_ONLN)
+-memory_jobs=$(awk '/MemAvailable:/ {n=int($2/2097152); print (n>0?n:1)}' /proc/meminfo)
+-resource_jobs=$((cpus < memory_jobs ? cpus : memory_jobs))
+ if [[ -z $JOBS ]]; then
+-    default_jobs=$(jq -er .default_max_jobs "$RULES")
+-    JOBS=$((resource_jobs < default_jobs ? resource_jobs : default_jobs))
+-elif ((JOBS > resource_jobs)); then
+-    say "Reducing requested concurrency to $resource_jobs workers for available CPU/RAM"
+-    JOBS=$resource_jobs
++    JOBS=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN)
+ fi
+ say "Target $DISTRO/$RELEASE AArch64; Linux $VERSION; $JOBS jobs; Image + Uke DTB + modules + RPM/SRPM"
+ if ((DRY_RUN)); then say "Pinned build image: $BASE_IMAGE"; exit; fi
+diff --git a/tests/parallel-jobs.sh b/tests/parallel-jobs.sh
+new file mode 100755
+index 0000000..b10b29b
+--- /dev/null
++++ b/tests/parallel-jobs.sh
+@@ -0,0 +1,24 @@
++#!/usr/bin/env bash
++# CLI plans only; no source downloads, containers or compilation.
++set -Eeuo pipefail
++root=$(cd "$(dirname "$0")/.." && pwd)
++for jobs in 4 16; do
++    for argument in "--j$jobs" "--jobs=$jobs"; do
++        result=$(bash "$root/senemos.sh" --build 7.2.12 --distro fedora --dry-run "$argument")
++        grep -F "; $jobs jobs;" <<< "$result" >/dev/null
++    done
++done
++result=$(bash "$root/senemos.sh" --build 7.2.12 --distro fedora --dry-run)
++grep -F "; $(nproc) jobs;" <<< "$result" >/dev/null
++for argument in --j0 --j4bad --jobs=-1 --jobs=01; do
++    if bash "$root/senemos.sh" --dry-run "$argument" >/dev/null 2>&1; then
++        echo "Invalid jobs accepted: $argument" >&2
++        exit 1
++    fi
++done
++if command -v rpmspec >/dev/null; then
++    parsed=$(rpmspec --parse --define '_smp_build_ncpus 16' "$root/packaging/senemos-uke-linux-kernel-mainline.spec")
++    grep -Fx 'jobs=16' <<< "$parsed" >/dev/null
++    if grep -F 'test "$jobs" -le' <<< "$parsed"; then exit 1; fi
++fi
++echo 'CPU defaults, explicit 4/16 jobs and invalid job refusals passed; no build ran.'
