@@ -1,6 +1,10 @@
 # Uke Linux images
 
-26 October 2026: [public builds and manual installation](https://github.com/MCC45TR/uke-fedora-builder/blob/main/docs/PUBLIC-BUILD.md) use the workspace's `./ukelinux.sh`. The 24 October KDE EXT4 singleboot export passed host checks; that release currently has no attached assets. A Linux 7.3 replacement is building. Its exact output and tablet acceptance are not yet established. The dated Alpha artifacts retain their original scope.
+26 October 2026: the [KDE EXT4 singleboot testing image](https://github.com/MCC45TR/uke-linux/releases/tag/prebuild-fedora-kde-singleboot-ext4-20261026-k7.3.0-16-testing) now uses signed Linux 7.3.0-16.
+Host image checks pass; [validation and package/source records](releases/prebuild-fedora-kde-singleboot-ext4-20261026-k7.3.0-16-testing) retain the exact scope.
+The generic export requires local touch-reference provisioning before account
+setup; exact-export tablet acceptance remains open. Use the [frozen public build guide](https://github.com/MCC45TR/uke-fedora-builder/blob/b0fd2380b07dbaaf37403c057b74796faf8f5ed3/docs/PUBLIC-BUILD.md)
+with the workspace's `./ukelinux.sh`. Dated Alpha artifacts retain their original scope.
 
 Fedora AArch64 images for Xiaomi Pad 7 and POCO Pad X1 (`uke`, SM7675).
 
@@ -31,8 +35,10 @@ installation and rollback notes before testing.
 A separate POCO Pad X1 installation boots signed Linux 7.3.0-15 and original KDE.
 Display, normal touch, Wi-Fi, selected Bluetooth, rotation and automatic
 brightness work in recorded tests. HDMI works on Linux 7.3; earlier Juo monitor
-audio and Gigabit Ethernet tests pass. One native H.264 constrained-baseline
-mode produces 30 exact-reference frames; High fails and broader video remains
+audio and Gigabit Ethernet tests pass. Seven VA decode modes produce 30 exact
+320x240 reference frames each, including ten-bit HEVC/VP9. Basic native H.264
+encoding produces 30 independently decoded frames; the native FFmpeg High
+decode path still fails. Browser video, larger modes and endurance remain
 unqualified. Charging protection, sleep, display/input lifecycle, internal
 audio and cameras remain incomplete. This is a different filesystem from the
 exported images. See the [current hardware table](https://github.com/MCC45TR/uke-linux#hardware-support).
