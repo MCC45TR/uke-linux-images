@@ -1,0 +1,20 @@
+{
+  "build_started_date_utc": "2026-10-23",
+  "available_host_cpus": 16,
+  "requested_jobs": 16,
+  "builder_initial_commit": "9bf77f621f2f8ed6f6fa6845c5696939c955b622",
+  "builder_fixes_commit": "a3c983d8e5a617a8848fc4a5121592dac6444a39",
+  "kernel_cli_commit": "22f3faf2bf455ba2c5e812038deb7db621306255",
+  "native_worker_image": "sha256:adc7bc977e9c9a2a301177a398affb5f277437627dce4fd68ed52a1b17419fe4",
+  "native_worker_archive_sha256": "bf800b7c3f190dfb7c9f7daabf98fa8b7a1b8354403027c2bc59de1aec7e5a56",
+  "offline_label_tool_sdk_image": "sha256:40c9868d08bbad2cb58312fd4c8295ec2a3f132f95bd0eb150a45e05160c2866",
+  "offline_label_tool_sha256": "85c654efeac5baca404c83be8a9771ad7097c86c37af2abae7794a291a87c703",
+  "sparse_tool_sha256": "d67039555fa46b0d147e019e91fba55d595bf44615e445badfa172a2699e5fed",
+  "root_archive_sha256": "ac335100b5ce0d6be2526824f03bbd6a81dc58bf13477d29c46e952888d64fa1",
+  "recipe_checksums_authoritative": true,
+  "stages_resumed_after_host_tooling_corrections": true,
+  "independent_clean_rebuild_tested": false,
+  "kernel_rpms_locally_built": false,
+  "physical_boot_tested": false,
+  "private_device_input_included": true
+}

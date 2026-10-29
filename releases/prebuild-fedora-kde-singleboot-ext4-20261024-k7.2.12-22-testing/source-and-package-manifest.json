@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-24",
+  "device": "uke",
+  "architecture": "aarch64",
+  "distribution": "Fedora Rawhide",
+  "desktop": "original Fedora KDE",
+  "builder": {
+    "repository": "https://github.com/MCC45TR/uke-fedora-builder",
+    "base_commit": "fdb91c7732fe0084ad4c30373f0c70e5be1ad2c6",
+    "final_commit": "9f32c26f59c8d6bc910d184b132d6b0c018c3bab",
+    "changes": "builder-source.patch",
+    "patch_sha256": "b179d019225c4e01cff6730cc56155f2326d989e33c9c759de99047bfe7eeddb"
+  },
+  "kernel_cli": {
+    "repository": "https://github.com/MCC45TR/senemos-uke-kernel-mainline",
+    "base_commit": "30b86df48f18d09f996eca736e15774bb758280b",
+    "final_commit": "22f3faf2bf455ba2c5e812038deb7db621306255",
+    "changes": "kernel-cli-source.patch",
+    "patch_sha256": "b471a8899d5545d34e1a2fdb33d10ab7f5cde2bc9b99baaac3d1f2e03e02b4dc"
+  },
+  "kernel": {
+    "repository": "mcc45tr/uke-linux-test",
+    "release": "7.2.12-22.fc46.aarch64",
+    "source_rpm": "senemos-uke-linux-kernel-mainline-7.2.12-22.fc46.src.rpm",
+    "rpm_key_fingerprint": "DAFC3C5A881FB49C7167EE2D6F772E3D487BD13E",
+    "locally_recompiled": false
+  },
+  "installed_package_manifest": "installed-rpms.tsv",
+  "image_manifest": "manifest.json",
+  "private_device_data_in_current_root": true,
+  "oem_firmware": {
+    "package": "uke-firmware-3.0.304.0-7.fc46.noarch",
+    "source_rpm": "uke-hw-1.8.0-1.fc46.src.rpm",
+    "declared_license": "LicenseRef-Proprietary",
+    "file_level_redistribution_review_complete": false
+  },
+  "physical_boot_tested": false,
+  "independent_clean_rebuild_tested": false,
+  "artifact_profile": "experimental-testing-prebuild",
+  "root_asset": "system.img.zst",
+  "root_partition": "userdata"
+}

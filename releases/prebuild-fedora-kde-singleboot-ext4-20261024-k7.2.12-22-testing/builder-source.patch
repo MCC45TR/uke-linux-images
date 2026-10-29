@@ -1,0 +1,689 @@
+diff --git a/README.md b/README.md
+index 42f2410..cb5f5b6 100644
+--- a/README.md
++++ b/README.md
+@@ -16,8 +16,10 @@ Run `./ukelinux.sh` from the [workspace](https://github.com/MCC45TR/uke-linux)
+ for image or kernel builds. The [public build guide](docs/PUBLIC-BUILD.md) covers
+ Ubuntu/Fedora/openSUSE/Arch/Alpine hosts, both boot layouts, four filesystems,
+ KDE/GNOME, three package channels, prerequisite consent and output selection.
+-CLI fixtures, stored-RPM tests and a Podman archive round trip pass on the host;
+-complete AArch64 image builds and physical acceptance remain untested.
++CLI fixtures and a resumed testing/singleboot/EXT4/KDE composition passed host
++content, metadata, SELinux and two sparse-decoder comparisons on 23 October 2026.
++It used signed testing kernel RPMs; a clean repeat build and physical acceptance
++remain untested.
+ Historical recipes below keep their dated scope.
+ Image builds require `--touch-reference FILE` for touchscreen account
+ setup and produce private, device-specific output. Generic USB input setup is
+diff --git a/configs/Containerfile.public-native b/configs/Containerfile.public-native
+index 21eff27..9a078e0 100644
+--- a/configs/Containerfile.public-native
++++ b/configs/Containerfile.public-native
+@@ -2,7 +2,8 @@ ARG BASE_IMAGE
+ FROM ${BASE_IMAGE}
+ RUN dnf -y update --refresh && dnf -y --setopt=install_weak_deps=False install \
+     libguestfs-tools-c kernel-core kernel-modules qemu-kvm-core f2fs-tools e2fsprogs xfsprogs btrfs-progs \
+-    gcc-c++ jq tar coreutils findutils util-linux attr acl policycoreutils android-tools \
++    gcc-c++ e2fsprogs-devel libselinux-devel jq tar coreutils findutils util-linux attr acl policycoreutils android-tools \
++    curl gnupg2 cpio zstd rpm-build dnf5-plugins ripgrep kmod createrepo_c \
+     && if [ "$(uname -m)" = x86_64 ]; then dnf -y install qemu-user-static-aarch64; fi \
+     && dnf clean all
+ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 TZ=UTC LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg
+diff --git a/configs/public-build.json b/configs/public-build.json
+index f0fe8df..773f70f 100644
+--- a/configs/public-build.json
++++ b/configs/public-build.json
+@@ -8,7 +8,7 @@
+     "url": "https://github.com/MCC45TR/senemos-uke-kernel-mainline.git",
+     "commit": "dbfbc03f295662434aef3011ad2c692c2356c87e",
+     "release": "7.2.12-17",
+-    "policy": "All channels compile this explicit native source; channel names select RPM repositories, not a kernel.org latest alias."
++    "policy": "Kernel-only builds and stable/unstable images compile this source. Testing images consume the latest signed mainline family from uke-linux-test."
+   },
+   "channels": {
+     "stable": {
+@@ -31,10 +31,14 @@
+     "automatic_activation": false
+   },
+   "validation": {
+-    "source_contract_only": true,
+-    "native_build_tested": false,
+-    "image_build_tested": false,
+-    "hardware_tested": false
++    "source_contract_only": false,
++    "native_build_tested": true,
++    "image_build_tested": true,
++    "hardware_tested": false,
++    "tested_image_profile": "testing/singleboot/ext4/kde",
++    "stages_resumed": true,
++    "independent_clean_rebuild_tested": false,
++    "kernel_source_build_tested": false
+   },
+   "hardware": {
+     "url": "https://github.com/MCC45TR/uke-linux-hardware-support.git",
+diff --git a/docs/PUBLIC-BUILD.md b/docs/PUBLIC-BUILD.md
+index bd0f40e..8b7de3c 100644
+--- a/docs/PUBLIC-BUILD.md
++++ b/docs/PUBLIC-BUILD.md
+@@ -4,10 +4,12 @@
+ Rawhide AArch64 root. It does not consume a prepared private root, historical
+ Core cache, a stock boot dump or a pre-existing local container ID.
+ 
+-The implementation has shell syntax, CLI and source-integrity checks. Kernel,
+-container and image builds were not run for this change. None of the 48 image
+-selections has new physical acceptance from this work. Mutable Rawhide/COPR
+-repositories also prevent a promise of identical bytes on future builds.
++The native x86_64 worker and a resumed testing/singleboot/EXT4/KDE composition
++passed host checks on 23 October 2026. The image uses the signed testing
++`7.2.12-22` kernel family. Host-tooling corrections required stage resumption;
++an independent clean execution of the final recipe remains untested. No image
++selection has new physical acceptance. Mutable Rawhide/COPR repositories also
++prevent a promise of identical bytes on future builds.
+ 
+ ## Start
+ 
+@@ -29,7 +31,9 @@ including when the entry is invoked by an absolute path from elsewhere.
+ Each invocation creates a new private run directory and preserves older output.
+ The output filesystem must enforce a user-owned mode-0700 directory; otherwise
+ the build refuses before copying any private input. A filesystem that ignores
+-Unix permissions is unsuitable even if it has enough free space.
++Unix permissions is unsuitable even if it has enough free space. Temporary
++package roots and reference extraction use the container's Linux storage;
++large archives, images and receipts remain below the selected output parent.
+ 
+ For actual image builds, replace `./reference.bin` with that device's already
+ qualified private touch reference. Its required size is 5432 bytes and its mode
+@@ -48,7 +52,8 @@ must be 0600. Kernel builds and dry-run planning need no reference.
+   --desktop kde --channel unstable --dry-run
+ ```
+ 
+-`--jobs` accepts 1 through 8. `--linux-size` accepts 8192 through 65536 MiB and
++Parallelism defaults to the host's available CPU count. Use `--jobs 16` or
++`--j16` to override it; `--j4` selects four workers. `--linux-size` accepts 8192 through 65536 MiB and
+ defaults to 16384. The sparse codec has a 64 GiB raw-image bound. Allow at least
+ 64 GiB for kernel/tool work plus three times the selected root size. x86_64
+ hosts compile the native AArch64 kernel under QEMU user emulation, which can
+@@ -67,10 +72,20 @@ be slow. No generic ARM64 kernel is substituted.
+ | `testing` | Signed packages from `mcc45tr/uke-linux-test`; the installed control channel is named `test`. |
+ | `unstable` | The test repository with the installed control channel named `unstable`. |
+ 
+-All three channels build the same explicit native kernel source selected in
++Testing image builds retrieve the latest signed mainline kernel family from
++`mcc45tr/uke-linux-test`, verify its signing key, every RPM signature, matching
++versions, module hashes and both boot payloads. The exact RPMs and checksums are
++retained. These builds use native host package tools and an AArch64 installroot;
++on x86_64, scriptlets use an isolated container-local binfmt table and the original
++Fedora QEMU interpreter. No host binfmt registration is changed.
++
++Kernel-only builds and the other image channels build the explicit source selected in
+ [`configs/public-build.json`](../configs/public-build.json). An unstable selection
+ does not silently replace it with an unported kernel.org release candidate.
+ Kernel-only output uses that same source/spec and produces both root profiles.
++For historical source pins, the builder removes the spec's eight-worker limit
++before SRPM generation and retains that exact build-policy diff beside the RPMs.
++The cached checkout is restored after source generation; kernel/DT inputs are unchanged.
+ The stable repository predates the current source families. Stable image builds
+ therefore also compile `uke-additional`, `uke-sensors`, `uke-hw`, `uke-power`,
+ `uke-core` and `uke-metas` from the exact public hardware commit in that policy.
+@@ -116,6 +131,10 @@ signatures are verified, and the selected COPR key fingerprint is
+ checked before import. Original Fedora desktop Python dependencies are admitted
+ only when their payload bytes match separately signature-verified Fedora RPMs.
+ 
++Target installation uses all RPM languages; the worker's container language
++filter is not inherited. KDE roots must pass the existing native locale-file
++audit against every installed RPM's file inventory.
++
+ Root installation and every static/dynamic platform BuildRequires pass first
+ store the resolved DNF5 transaction and its RPM bytes under
+ `artifacts/transactions/`, then replay that captured transaction with external
+@@ -221,9 +240,10 @@ The kernel-only output is insufficient for a new installation: install its exact
+ matched RPM/module set into an existing compatible root before using its boot
+ images. Never flash a kernel against a different module set.
+ 
+-F2FS userdata is expanded offline by the source initramfs on first boot. Other
+-formats retain the image size; automatic online growth is not enabled by this
+-recipe. Complete original desktop account setup, then **run
++The delivered root starts at the selected raw size. F2FS has an early offline
++growth path; current Uke packages also enable the completion-gated
++`uke-root-grow.service` for admitted non-F2FS userdata. Physical growth is not
++qualified by host image checks. Complete original desktop account setup, then **run
+ `sudo dnf update --refresh` after the first Fedora boot**. This is required.
+ A package update does not authorize a kernel slot write; activation remains a
+ separately guarded operation.
+@@ -233,8 +253,14 @@ separately guarded operation.
+ The public shell fixtures cover all 48 selections, three kernel channels,
+ invalid input, package-consent refusal, missing-`jq` planning and output paths.
+ The source change also extends parser fixtures for the explicit Linux profile.
+-No new container, kernel, filesystem image, VM boot or tablet run was executed
+-for the 22 October implementation. First full builds, package resolution on each
+-channel, desktop setup and recoverable tablet boot remain necessary acceptance
+-checks. Historical `core`, `boot` and `boot-pair` commands remain available for
+-their dated frozen contracts; their old caches are not prerequisites here.
++On 23 October, the testing/singleboot/EXT4/KDE image passed original-Fedora helper
++and locale audits, full filesystem content and capability/ACL readback, offline
++SELinux policy-label verification, and byte comparisons after decoding with
++both the project codec and AOSP `simg2img`. A native x86_64 worker executed the
++AArch64 package transaction through QEMU. The signed kernel RPMs were retrieved,
++not compiled locally. The run used 16 workers and resumed standard stages after
++host-tooling corrections. Other image combinations, a clean repeat build, source
++kernel compilation, desktop setup, filesystem growth and recoverable tablet
++boot remain untested by this run. Historical `core`, `boot` and `boot-pair`
++commands remain available for their dated frozen contracts; their old caches
++are not prerequisites here.
+diff --git a/src/image/ext4-labels.cpp b/src/image/ext4-labels.cpp
+index 62812cf..c648976 100644
+--- a/src/image/ext4-labels.cpp
++++ b/src/image/ext4-labels.cpp
+@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
+         selabel_handle *labels = selabel_open(SELABEL_CTX_FILE, options, 1);
+         if (!labels) throw std::runtime_error("Cannot load the target file-context policy");
+         const fs::path root = fs::canonical(argv[3]);
+-        unsigned long count = 0;
++        unsigned long count = 0, excluded = 0;
+         auto visit = [&](const std::string &path, const fs::path &source, bool generated) {
+             ext2_ino_t number;
+             check(ext2fs_namei(image, EXT2_ROOT_INO, EXT2_ROOT_INO, path.c_str(), &number), "resolve inode");
+@@ -45,7 +45,8 @@ int main(int argc, char **argv) {
+                     throw std::runtime_error("Ownership or mode differs at " + path);
+             }
+             char *context = nullptr;
+-            if (selabel_lookup_raw(labels, &context, path.c_str(), inode.i_mode))
++            // ENOENT also represents the target policy's explicit <<none>> entries.
++            if (selabel_lookup_raw(labels, &context, path.c_str(), inode.i_mode) && errno != ENOENT)
+                 throw std::runtime_error("Policy has no context for " + path);
+             ext2_xattr_handle *attrs = nullptr;
+             check(ext2fs_xattrs_open(image, number, &attrs), "open xattrs");
+@@ -68,20 +69,21 @@ int main(int argc, char **argv) {
+                 } else if (cap_error != EXT2_ET_EA_KEY_NOT_FOUND) check(cap_error, "get capability");
+                 if (actual_cap) ext2fs_free_mem(&actual_cap);
+             }
+-            if (write) {
++            if (write && context) {
+                 check(ext2fs_xattr_set(attrs, "security.selinux", context, std::strlen(context) + 1), "set context");
+                 check(ext2fs_xattrs_write(attrs), "write xattrs");
+-            } else {
++            } else if (context) {
+                 void *actual = nullptr;
+                 size_t length = 0;
+-                check(ext2fs_xattr_get(attrs, "security.selinux", &actual, &length), "get context");
++                const std::string operation = "get context at " + path;
++                check(ext2fs_xattr_get(attrs, "security.selinux", &actual, &length), operation.c_str());
+                 if (length != std::strlen(context) + 1 || std::memcmp(actual, context, length))
+                     throw std::runtime_error("Context differs at " + path);
+                 ext2fs_free_mem(&actual);
+             }
+             ext2fs_xattrs_close(&attrs);
+-            freecon(context);
+-            ++count;
++            if (context) { freecon(context); ++count; }
++            else ++excluded;
+         };
+         visit("/", root, false);
+         for (const auto &entry : fs::recursive_directory_iterator(root)) {
+@@ -92,7 +94,8 @@ int main(int argc, char **argv) {
+         selabel_close(labels);
+         check(ext2fs_close(image), "close ext4");
+         std::cout << (write ? "Applied" : "Verified") << " " << count
+-                  << " SELinux inode contexts; source ownership and modes preserved\n";
++                  << " SELinux inode contexts; " << excluded
++                  << " policy-excluded paths; source ownership, modes and capabilities preserved\n";
+     } catch (const std::exception &error) {
+         std::cerr << error.what() << '\n';
+         return 1;
+diff --git a/src/public/entry.sh b/src/public/entry.sh
+index d0f1bd6..6178271 100755
+--- a/src/public/entry.sh
++++ b/src/public/entry.sh
+@@ -11,7 +11,7 @@ Usage: ./ukelinux.sh [--build image|kernel] [options]
+   --channel stable|testing|unstable Uke RPM channel (Fedora remains Rawhide)
+   --out DIRECTORY                   Default: ./out in the invoking directory
+   --linux-size MIB                  Root image size; default 16384, minimum 8192
+-  --jobs N                          Compiler workers; default 2, maximum 8
++  --jobs N, --jN                    Parallel workers; default: available CPUs
+   --touch-reference FILE            Device-local 5432-byte reference; required for images
+   --yes                             Consent to listed host preparation operations
+   --offline                         Reuse prepared worker images and kernel inputs
+@@ -21,7 +21,8 @@ Usage: ./ukelinux.sh [--build image|kernel] [options]
+ 
+ Supported Linux hosts: Ubuntu, Fedora, openSUSE, Arch Linux and Alpine;
+ x86_64 and AArch64. Bash bootstraps after confirmation on minimal hosts.
+-Image builds compile the pinned native kernel spec, then compose an empty root.
++Testing images use the latest signed COPR mainline kernel and an empty root.
++Other image channels compile the pinned native kernel spec before composition.
+ Kernel-only builds produce its source RPM, binary RPMs and both boot profiles.
+ Existing core, boot, boot-pair and --check-device commands remain available.
+ Run sudo dnf update --refresh after the first Fedora boot. This is required.
+@@ -63,13 +64,15 @@ TEXT
+         '     Complete the original desktop account setup using the touchscreen.' \
+         '     REQUIRED: run sudo dnf update --refresh in Fedora after the first boot.' \
+         '     Automatic kernel activation stays disabled. Updates do not authorize a slot write.' \
+-        '     F2FS userdata grows offline during first boot; other formats retain the image size.'
++        '     The initial raw filesystem size is recorded in manifest.json.' \
++        '     Growth follows the installed Uke filesystem policy; physical growth was not tested by this build.'
+ }
+ public_main() {
+     local target=image mode=multiboot filesystem=ext4 desktop=kde channel=testing
+     local output=$PWD/out out_given=0 reference='' root_mib=16384 key value argument prior=''
+     local -A selected=()
+-    JOBS=2 OFFLINE=0 DRY_RUN=0 UKE_ASSUME_YES=0 ENGINE='' CID='' PAUSED=0
++    JOBS=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1\n')
++    OFFLINE=0 DRY_RUN=0 UKE_ASSUME_YES=0 ENGINE='' CID='' PAUSED=0
+     # Preserve explicit historical commands without making them the default path.
+     for argument in "$@"; do
+         if [[ $argument == --check-device || $argument == --build=core || $argument == --build=boot || $argument == --build=boot-pair ||
+@@ -84,6 +87,7 @@ public_main() {
+             --help|-h) public_help; return;;
+             --self-test) bash "$BUILDER/tests/public-build-contract.sh"; return;;
+             --yes) UKE_ASSUME_YES=1;; --offline) OFFLINE=1;; --dry-run) DRY_RUN=1;;
++            --j[0-9]*) key=--jobs; value=${1#--j};;
+             --build=*|--mode=*|--filesystem=*|--desktop=*|--channel=*|--out=*|--jobs=*|--linux-size=*|--touch-reference=*) key=${1%%=*}; value=${1#*=};;
+             --build|--mode|--filesystem|--desktop|--channel|--out|--jobs|--linux-size|--touch-reference)
+                 key=$1; shift; (($#)) || die "Missing value for $key"; value=$1;;
+@@ -111,7 +115,7 @@ public_main() {
+     case $filesystem in ext4|f2fs|btrfs|xfs) :;; *) die 'Unsupported root filesystem';; esac
+     case $desktop in kde|gnome) :;; *) die 'Desktop must be kde or gnome';; esac
+     case $channel in stable|testing|unstable) :;; *) die 'Unknown package channel';; esac
+-    [[ $JOBS =~ ^[1-8]$ ]] || die 'Jobs must be between 1 and 8'
++    [[ $JOBS =~ ^[1-9][0-9]*$ ]] || die 'Jobs must be a positive integer'
+     [[ $root_mib =~ ^[1-9][0-9]{3,4}$ ]] || die 'Root size must be 8192..65536 MiB'
+     ((root_mib >= 8192 && root_mib <= 65536)) || die 'Root size must be 8192..65536 MiB'
+     [[ -n $output && $output != *:* && $output != *,* && $output != *$'\n'* ]] || die 'Output path must be nonempty and contain no colon, comma or newline'
+@@ -123,7 +127,7 @@ public_main() {
+     [[ $mode != singleboot ]] || partition=userdata
+     say "$target: Fedora Rawhide AArch64; $mode; $filesystem; $desktop; $channel; $JOBS workers"
+     say "Output parent: $output (a new run directory is created; existing output is preserved)"
+-    say 'The pinned source kernel is common to all channels; channel names select the Uke RPM repository.'
++    say 'Testing images use the latest signed mainline kernel from uke-linux-test; source builds retain the explicit kernel pin.'
+     say 'REQUIRED after first Fedora boot: sudo dnf update --refresh'
+     ((DRY_RUN == 0)) || return 0
+     [[ $target != image || -n $reference ]] || die 'Image account setup requires --touch-reference from this device; USB input is not yet supported'
+@@ -151,7 +155,7 @@ public_main() {
+     jq -n --arg target "$target" --arg mode "$mode" --arg fs "$filesystem" --arg desktop "$desktop" \
+         --arg channel "$channel" --arg partition "$partition" --argjson size "$root_mib" \
+         --argjson jobs "$JOBS" --arg builder "$(git -C "$BUILDER" rev-parse HEAD)" \
+-        '{target:$target,mode:$mode,filesystem:$fs,desktop:$desktop,channel:$channel,partition:$partition,size_mib:$size,jobs:$jobs,builder_commit:$builder}' > "$WORK/request.json"
++        '{device:"uke",architecture:"aarch64",distribution:"fedora",release:"rawhide",target:$target,mode:$mode,filesystem:$fs,desktop:$desktop,channel:$channel,partition:$partition,size_mib:$size,jobs:$jobs,builder_commit:$builder}' > "$WORK/request.json"
+     if [[ -n $reference ]]; then install -m600 "$reference" "$WORK/inputs/reference.bin"; fi
+     local native_image arm_image native_base arm_base recipe_sha
+     native_base=$(jq -er --arg arch "$architecture" '.fedora_rawhide_images[$arch]' "$WORK/recipe/configs/build-rules.json")
+@@ -160,6 +164,11 @@ public_main() {
+     native_image=localhost/uke-public-native:${recipe_sha:0:16}-$architecture
+     arm_image=localhost/uke-public-arm64:${recipe_sha:0:16}
+     public_worker "$native_image" "$host_platform" "$native_base" Containerfile.public-native
++    local repository_kernel=0
++    [[ $target != image || $channel != testing ]] || repository_kernel=1
++    if ((repository_kernel)); then
++        arm_image=$native_image
++    else
+     TEST_IMAGE=$arm_base
+     "$ENGINE" image inspect "$arm_base" >/dev/null 2>&1 || { ((OFFLINE == 0)) && "$ENGINE" pull --platform linux/arm64 "$arm_base"; }
+     if [[ $architecture == x86_64 ]]; then
+@@ -169,17 +178,25 @@ public_main() {
+         prepare_aarch64
+     fi
+     public_worker "$arm_image" linux/arm64 "$arm_base" Containerfile.public
++    fi
+     native_image=$(public_snapshot_worker "$native_image")
+     arm_image=$(public_snapshot_worker "$arm_image")
+     (cd "$WORK" && sha256sum inputs/worker-*.tar) > "$WORK/inputs/worker-archives.sha256"
+-    say 'Compiling the native AArch64 kernel; x86_64 workers use explicit emulation'
+-    public_stage "$arm_image" linux/arm64 kernel
++    if ((repository_kernel)); then
++        say 'Retrieving the latest signed AArch64 mainline kernel from uke-linux-test'
++        public_stage "$arm_image" "$host_platform" kernel
++    else
++        say 'Compiling the native AArch64 kernel; x86_64 workers use explicit emulation'
++        public_stage "$arm_image" linux/arm64 kernel
++    fi
+     if [[ $target == image ]]; then
+         if [[ $channel == stable ]]; then
+             say 'Building the pinned platform source families missing from the stable repository'
+             public_stage "$arm_image" linux/arm64 hardware
+         fi
+-        public_stage "$arm_image" linux/arm64 root
++        local root_platform=linux/arm64
++        ((repository_kernel == 0)) || root_platform=$host_platform
++        public_stage "$arm_image" "$root_platform" root
+         public_stage "$native_image" "$host_platform" filesystem
+     fi
+     jq --arg native "$native_image" --arg arm "$arm_image" \
+@@ -246,7 +263,10 @@ public_stage() {
+         owner=$(id -u):$(id -g)
+     fi
+     wait_idle
+-    CID=$("$ENGINE" create --platform "$platform" --network="$network" --security-opt label=disable \
++    local -a capabilities=()
++    # Rootless cross-install scriptlets need a binfmt table in this container's user namespace.
++    if [[ $stage == root && $platform == linux/amd64 ]]; then capabilities+=(--cap-add SYS_ADMIN); fi
++    CID=$("$ENGINE" create --platform "$platform" --network="$network" --security-opt label=disable "${capabilities[@]}" \
+         --cpus="$JOBS" -v "$WORK:/job" -v "$WORK/recipe:/builder:ro" -v "$output/cache:/cache" \
+         -e "UKE_OFFLINE=$OFFLINE" -e "UKE_OUTPUT_OWNER=$owner" "$image" bash /builder/src/public/stage.sh "$stage")
+     "$ENGINE" start -a "$CID" 2>&1 | tee "$WORK/$stage.log"
+diff --git a/src/public/filesystem.sh b/src/public/filesystem.sh
+index a53ebcc..5ca4412 100755
+--- a/src/public/filesystem.sh
++++ b/src/public/filesystem.sh
+@@ -7,6 +7,11 @@ size=$(jq -er .size_mib /job/request.json)
+ case $filesystem in ext4|f2fs|xfs|btrfs) :;; *) exit 2;; esac
+ case $partition in linux|userdata) :;; *) exit 2;; esac
+ [[ $size =~ ^[1-9][0-9]{3,6}$ && ! -e /job/root.raw && -f /job/rootfs.tar ]]
++expected=/var/tmp/uke-expected-root
++readback=/var/tmp/uke-readback-root
++[[ ! -e $expected && ! -e $readback ]]
++mkdir "$expected" "$readback"
++tar --extract --numeric-owner --same-owner --same-permissions --acls --xattrs --xattrs-include=security.capability -f /job/rootfs.tar -C "$expected"
+ truncate -s "${size}M" /job/root.raw
+ [[ -f /job/root.raw && ! -L /job/root.raw ]]
+ case $filesystem in
+@@ -14,15 +19,25 @@ case $filesystem in
+     f2fs) format='mkfs f2fs /dev/sda label:UKE_LINUX features:extra_attr,inode_checksum,sb_checksum';;
+     *) format="mkfs $filesystem /dev/sda label:UKE_LINUX blocksize:4096";;
+ esac
++relabel='selinux-relabel /etc/selinux/targeted/contexts/files/file_contexts / force:true'
++[[ $filesystem != ext4 ]] || relabel=''
+ guestfish --rw --format=raw -a /job/root.raw <<GUEST
+ run
+ $format
+ mount /dev/sda /
+ tar-in /job/rootfs.tar / xattrs:true acls:true
+-selinux-relabel /etc/selinux/targeted/contexts/files/file_contexts / force:true
++$relabel
+ sync
+ umount-all
+ GUEST
++if [[ $filesystem == ext4 ]]; then
++    # The appliance skips virtual directories; label image inodes offline.
++    c++ -std=c++20 -O2 -Wall -Wextra -Werror /builder/src/image/ext4-labels.cpp \
++        -o /job/ext4-labels -lext2fs -lcom_err -lselinux
++    contexts=$expected/etc/selinux/targeted/contexts/files/file_contexts
++    /job/ext4-labels apply /job/root.raw "$expected" "$contexts"
++    /job/ext4-labels verify /job/root.raw "$expected" "$contexts"
++fi
+ # A separate read-only appliance verifies the populated image, not the staging tree.
+ guestfish --ro --format=raw -a /job/root.raw <<'GUEST' > /job/filesystem-readback.txt
+ run
+@@ -37,23 +52,33 @@ grep -Fx "$filesystem" /job/filesystem-readback.txt
+ grep -Fx UKE_LINUX /job/filesystem-readback.txt
+ grep -aF passwd_file_t /job/filesystem-readback.txt
+ # Ignore generated SELinux labels here; contents, owners, ACLs and capabilities must match.
+-tar --compare --numeric-owner --acls --xattrs --xattrs-include=security.capability -f /job/root-readback.tar -C /job/root
++tar --compare --numeric-owner --acls --xattrs --xattrs-include=security.capability -f /job/root-readback.tar -C "$expected"
++tar --extract --numeric-owner --same-owner --same-permissions --acls --xattrs --xattrs-include=security.capability -f /job/root-readback.tar -C "$readback"
++for name in expected readback; do
++    bash /builder/src/image/metadata-manifest.sh "${!name}" "/job/artifacts/xattrs-$name.tsv"
++done
++cmp /job/artifacts/xattrs-expected.tsv /job/artifacts/xattrs-readback.tsv
+ for name in rootfs root-readback; do
+     tar -tf "/job/$name.tar" | sed -e 's|^\./||' -e 's|/$||' | LC_ALL=C sort > "/job/$name.files"
+ done
+ cmp /job/rootfs.files /job/root-readback.files
+ c++ -std=c++20 -O2 -Wall -Wextra -Werror /builder/src/boot-pair/android-sparse.cpp -o /job/android-sparse
+ /job/android-sparse encode /job/root.raw "/job/artifacts/$partition.img"
+-/job/android-sparse decode "/job/artifacts/$partition.img" /job/expanded.raw
+-cmp /job/root.raw /job/expanded.raw
+-simg2img "/job/artifacts/$partition.img" /job/aosp-expanded.raw
+-cmp /job/root.raw /job/aosp-expanded.raw
+-jq --arg raw "$(sha256sum /job/root.raw | cut -d ' ' -f1)" --argjson bytes "$(stat -c %s /job/root.raw)" \
++expanded=/var/tmp/uke-expanded.raw
++[[ ! -e $expanded ]]
++/job/android-sparse decode "/job/artifacts/$partition.img" "$expanded"
++dd if=/job/root.raw bs=4M status=none | cmp - "$expanded"
++rm "$expanded"
++simg2img "/job/artifacts/$partition.img" "$expanded"
++dd if=/job/root.raw bs=4M status=none | cmp - "$expanded"
++rm "$expanded"
++jq --arg fs "$filesystem" --arg raw "$(sha256sum /job/root.raw | cut -d ' ' -f1)" --argjson bytes "$(stat -c %s /job/root.raw)" \
+     --arg sparse "$(sha256sum "/job/artifacts/$partition.img" | cut -d ' ' -f1)" \
+     --arg boot "$(sha256sum /job/artifacts/boot.img | cut -d ' ' -f1)" \
+     --argjson boot_bytes "$(stat -c %s /job/artifacts/boot.img)" \
+     '. + {root_raw_bytes:$bytes,root_raw_sha256:$raw,root_sparse_sha256:$sparse,boot_sha256:$boot,boot_bytes:$boot_bytes,
+       filesystem_contents_readback:true,filesystem_metadata_readback:true,selinux_relabel_performed:true,
++      selinux_policy_contexts_verified:($fs=="ext4"),
+       sparse_roundtrip_verified:true,independent_aosp_decoder_verified:true,physical_boot_tested:false,hardware_tested:false}' \
+     /job/artifacts/manifest.json > /job/manifest.tmp
+ mv /job/manifest.tmp /job/artifacts/manifest.json
+diff --git a/src/public/repository-kernel.sh b/src/public/repository-kernel.sh
+new file mode 100755
+index 0000000..9b49ce6
+--- /dev/null
++++ b/src/public/repository-kernel.sh
+@@ -0,0 +1,61 @@
++#!/usr/bin/env bash
++# Retrieve one signed, matched kernel family; never execute its scriptlets here.
++set -Eeuo pipefail
++[[ $(jq -er .channel /job/request.json) == testing ]]
++base=senemos-uke-linux-kernel-mainline
++project=uke-linux-test
++key=/cache/$project.asc
++if [[ ${UKE_OFFLINE:-0} != 1 ]]; then
++    curl --proto '=https' --tlsv1.2 -fL --retry 3 \
++        "https://download.copr.fedorainfracloud.org/results/mcc45tr/$project/pubkey.gpg" -o "$key.part"
++    mv "$key.part" "$key"
++fi
++expected=$(jq -er .channels.testing.fingerprint /builder/configs/public-build.json)
++[[ $(gpg --show-keys --with-colons "$key" | awk -F: '$1=="fpr" {print $10;exit}') == "$expected" ]]
++mkdir -p /job/kernel-keydb /job/artifacts/kernel /job/kernel-payload
++rpmkeys --dbpath /job/kernel-keydb --import "$key"
++cat > /etc/yum.repos.d/uke-kernel.repo <<'REPO'
++[uke-kernel]
++name=Uke testing kernel inputs
++baseurl=https://download.copr.fedorainfracloud.org/results/mcc45tr/uke-linux-test/fedora-rawhide-aarch64/
++enabled=0
++gpgcheck=1
++skip_if_unavailable=False
++REPO
++dnf=(dnf5 --forcearch=aarch64 --disable-repo='*' --enable-repo=uke-kernel
++    --setopt=cachedir=/cache/kernel-repository --setopt=keepcache=True)
++[[ ${UKE_OFFLINE:-0} != 1 ]] || dnf+=(--cacheonly)
++release=$("${dnf[@]}" repoquery --arch=aarch64 --latest-limit=1 --queryformat '%{version}-%{release}' "$base-core")
++[[ $release =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+\.fc46$ ]]
++packages=()
++for component in '' -core -modules -dtbs -boot -singleboot; do
++    packages+=("$base$component-$release.aarch64")
++done
++"${dnf[@]}" download --destdir=/job/artifacts/kernel "${packages[@]}"
++archives=(/job/artifacts/kernel/*.aarch64.rpm)
++[[ ${#archives[@]} == 6 ]]
++for archive in "${archives[@]}"; do
++    rpmkeys --dbpath /job/kernel-keydb --checksig "$archive" | grep -F 'signatures OK'
++    [[ $(rpm -qp --qf '%{VERSION}-%{RELEASE}.%{ARCH}' "$archive") == "$release.aarch64" ]]
++    rpm2cpio "$archive" > /job/payload.cpio
++    (cd /job/kernel-payload; cpio -idmu --quiet --no-absolute-filenames --io-size=1048576 < /job/payload.cpio)
++done
++release=${release%.fc46}
++bundle=/job/kernel-payload/usr/lib/senemos/kernel-updates/$release
++modules=/job/kernel-payload/usr/lib/modules/$release
++[[ -f $bundle/linux.img && -f $bundle/userdata.img && -f $modules/vmlinuz ]]
++(cd "$modules"; sha256sum -c "$bundle/modules.sha256")
++c++ -std=c++20 -O2 -Wall -Wextra -Werror /builder/src/boot/boot-image.cpp -o /job/boot-image
++for profile in linux userdata; do
++    /job/boot-image inspect "$bundle/$profile.img" > "/job/artifacts/kernel/boot-$profile.json"
++    /job/boot-image extract "$bundle/$profile.img" "/job/$profile.Image"
++    cmp "$modules/vmlinuz" "/job/$profile.Image"
++    cp "$bundle/$profile.img" "/job/artifacts/boot-$profile.img"
++done
++rpm -qp --qf '%{NEVRA}\t%{SOURCERPM}\n' "${archives[@]}" | LC_ALL=C sort > /job/artifacts/kernel/packages.tsv
++(cd /job/artifacts/kernel; sha256sum -- *.rpm) > /job/artifacts/kernel/RPM-SHA256SUMS
++jq --arg release "$release" --arg fingerprint "$expected" \
++    '. + {kernel_release:$release,kernel_rpms_locally_built:false,kernel_repository:"mcc45tr/uke-linux-test",
++      kernel_rpm_signature:"verified COPR signature",kernel_key_fingerprint:$fingerprint,
++      physical_boot_tested:false,hardware_tested:false,automatic_kernel_activation:false}' \
++    /job/request.json > /job/artifacts/manifest.json
+diff --git a/src/public/stage.sh b/src/public/stage.sh
+index 7028ff9..4cc2526 100755
+--- a/src/public/stage.sh
++++ b/src/public/stage.sh
+@@ -37,6 +37,10 @@ priority=1
+ REPO
+ }
+ if [[ $stage == kernel ]]; then
++    if [[ $(jq -er .target "$request") == image && $channel == testing ]]; then
++        bash /builder/src/public/repository-kernel.sh
++        exit
++    fi
+     [[ $(uname -m) == aarch64 ]]
+     source=/cache/kernel-$source_commit
+     if [[ ! -d $source/.git ]]; then
+@@ -46,7 +50,18 @@ if [[ $stage == kernel ]]; then
+     git -C "$source" checkout --detach "$source_commit"
+     [[ $(git -C "$source" rev-parse HEAD) == "$source_commit" && -z $(git -C "$source" status --porcelain --untracked-files=no) ]]
+     # The signed upstream source and every adaptation hash are checked by make srpm.
+-    make -C "$source" srpm outdir=/job/srpm
++    mkdir -p /job/artifacts/kernel
++    # Historical source pins cap jobs at eight; retain only this host build-policy correction.
++    spec=packaging/senemos-uke-linux-kernel-mainline.spec
++    cp "$source/$spec" /job/kernel-spec.original
++    sed '/^test "\$jobs" -le 8 || jobs=8$/d' /job/kernel-spec.original > /job/kernel-spec.parallel
++    diff -u --label "a/$spec" --label "b/$spec" /job/kernel-spec.original /job/kernel-spec.parallel \
++        > /job/artifacts/kernel/parallel-jobs.patch || [[ $? == 1 ]]
++    (
++        trap 'cp /job/kernel-spec.original "$source/$spec"' EXIT
++        cp /job/kernel-spec.parallel "$source/$spec"
++        make -C "$source" srpm outdir=/job/srpm
++    )
+     mkdir -p /job/rpmbuild
+     srpms=(/job/srpm/*.src.rpm)
+     [[ ${#srpms[@]} == 1 && -f ${srpms[0]} ]]
+@@ -60,7 +75,7 @@ if [[ $stage == kernel ]]; then
+     mkdir /job/kernel-payload
+     for package in /job/artifacts/kernel/*.aarch64.rpm; do
+         rpm2cpio "$package" > /job/payload.cpio
+-        (cd /job/kernel-payload; cpio -idmu --quiet --no-absolute-filenames < /job/payload.cpio)
++        (cd /job/kernel-payload; cpio -idmu --quiet --no-absolute-filenames --io-size=1048576 < /job/payload.cpio)
+     done
+     release=$(jq -er .kernel.release "$policy")
+     bundle=/job/kernel-payload/usr/lib/senemos/kernel-updates/$release
+@@ -77,6 +92,7 @@ if [[ $stage == kernel ]]; then
+     # The native RPM producer audits its linked initramfs with no Python exception.
+     jq --arg source "$source_commit" --arg release "$release" \
+         '. + {kernel_source_commit:$source,kernel_release:$release,kernel_rpms_locally_built:true,
++          kernel_parallelism_policy:"requested jobs retained; historical eight-worker cap removed in retained SRPM spec",
+           local_kernel_rpm_signature:"unsigned local build; signed upstream source verified by producer",
+           physical_boot_tested:false,hardware_tested:false,automatic_kernel_activation:false}' \
+         "$request" > /job/artifacts/manifest.json
+@@ -136,14 +152,24 @@ if [[ $stage == filesystem ]]; then
+     bash /builder/src/public/filesystem.sh
+     exit
+ fi
+-[[ $(uname -m) == aarch64 ]]
++if [[ $(uname -m) == x86_64 ]]; then
++    mkdir -p /run/uke-binfmt
++    mount -t binfmt_misc binfmt_misc /run/uke-binfmt
++    registration=':uke-image-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-aarch64-static:F'
++    printf '%s\n' "$registration" > /run/uke-binfmt/register
++else
++    [[ $(uname -m) == aarch64 ]]
++fi
+ reference=/job/inputs/reference.bin
+ [[ -f $reference && ! -L $reference && $(stat -c %s "$reference") == 5432 && $(stat -c %a "$reference") == 600 ]] || {
+     echo 'Image account setup requires a private device-local touch reference' >&2; exit 1;
+ }
+-root=/job/root
++root=/var/tmp/uke-target-root
++original=/var/tmp/uke-original-fedora
+ [[ ! -e $root ]]
+-mkdir -p "$root" /job/original-fedora /job/keydb
++mkdir -p "$root" "$original" /job/keydb
++printf '%%_install_langs all\n' > /etc/rpm/macros.zz-uke-languages
++[[ $(rpm --eval '%{_install_langs}') == all ]]
+ project=$(jq -er --arg channel "$channel" '.channels[$channel].project' "$policy")
+ fingerprint=$(jq -er --arg channel "$channel" '.channels[$channel].fingerprint' "$policy")
+ key=/cache/$project.asc
+@@ -183,7 +209,7 @@ else
+     packages+=(gnome-shell gnome-session-wayland-session gdm gnome-initial-setup
+         gnome-control-center gnome-software gnome-console nautilus)
+ fi
+-release=$(jq -er .kernel.release "$policy")
++release=$(jq -er .kernel_release /job/artifacts/manifest.json)
+ base=senemos-uke-linux-kernel-mainline
+ local_rpms=()
+ for component in '' -core -modules -dtbs -boot; do
+@@ -196,9 +222,10 @@ if [[ $partition == userdata ]]; then
+ fi
+ # Source-built local RPMs are unsigned. Remote RPM signatures remain mandatory.
+ rpm_root=$root
+-dnf=(dnf5 "${cache_flags[@]}" --use-host-config --installroot="$root" --releasever=rawhide
++dnf=(dnf5 "${cache_flags[@]}" --forcearch=aarch64 --use-host-config --installroot="$root" --releasever=rawhide
+     --disable-repo='*'
+     --setopt=cachedir="/cache/dnf-$channel" --setopt=keepcache=True
++    --setopt=optional_metadata_types=filelists
+     --setopt=install_weak_deps=False --setopt=gpgcheck=True --setopt=installonly_limit=0
+     --setopt=tsflags=nodocs --setopt=excludepkgs='kernel,kernel-core,kernel-modules*,*-debuginfo,*-debugsource,uke-local-touch-data,senemos-uke-linux-kernel-mainline-kvm*,senemos-uke-linux-kernel-mainline-unstable*')
+ repositories=(--enable-repo=rawhide --enable-repo=uke-selected)
+@@ -223,11 +250,11 @@ while IFS= read -r -d '' archive; do
+     [[ $(rpm --root "$root" -q "$name" --qf '%{NEVRA}' 2>/dev/null) == "$(rpm -qp --qf '%{NEVRA}' "$archive")" ]] || continue
+     rpmkeys --dbpath /job/keydb --checksig "$archive" | grep -F 'signatures OK'
+     printf '%s\t%s\n' "$(rpm -qp --qf '%{NEVRA}' "$archive")" "$(sha256sum "$archive" | cut -d ' ' -f1)" >> /job/artifacts/fedora-inputs.tsv
+-    rpm2cpio "$archive" > /job/payload.cpio
+-    (cd /job/original-fedora; cpio -idmu --quiet --no-absolute-filenames < /job/payload.cpio)
++    rpm2cpio "$archive" > /var/tmp/uke-payload.cpio
++    (cd "$original"; cpio -idmu --quiet --no-absolute-filenames --io-size=1048576 < /var/tmp/uke-payload.cpio)
+ done < <(find /job/artifacts/transactions/root -type f -name '*.rpm' -print0)
+ [[ -s /job/artifacts/fedora-inputs.tsv ]]
+-bash /builder/src/audit/check-target-payload.sh --original-kde-payload /job/original-fedora "$root"
++bash /builder/src/audit/check-target-payload.sh --original-kde-payload "$original" "$root"
+ chroot "$root" /usr/sbin/usermod -L root
+ systemctl --root="$root" enable NetworkManager.service firewalld.service bluetooth.service chronyd.service
+ systemctl --root="$root" disable sshd.service sshd.socket
+@@ -237,10 +264,14 @@ if [[ $desktop == kde ]]; then
+     chroot "$root" /usr/bin/kwriteconfig6 --file /etc/xdg/plasmasetuprc --group Accounts --key UserGroups wheel
+     chroot "$root" /usr/bin/systemd-sysusers /usr/lib/sysusers.d/plasma-setup-sysuser.conf
+     systemctl --root="$root" enable plasma-setup.service plasmalogin.service
++    rpm --root "$root" -qa --qf '[%{FILENAMES}\t%{FILEFLAGS}\t%{FILELANGS}\n]' > /job/artifacts/rpm-files.tsv
++    c++ -std=c++20 -O2 -Wall -Wextra -Werror /builder/src/image/audit-languages.cpp -o /job/audit-languages
++    /job/audit-languages "$root" /job/artifacts/rpm-files.tsv > /job/artifacts/language-audit.json
+ else
+     systemctl --root="$root" enable gdm.service
+ fi
+ mkdir -p "$root/etc/senemos" "$root/etc/uke-control" "$root/etc/dnf" "$root/var/lib/uke-touch"
++printf '%%_install_langs all\n' > "$root/etc/rpm/macros.uke-languages"
+ printf 'automatic=0\n' > "$root/etc/senemos/kernel-update.conf"
+ printf 'automatic=0\n' > "$root/etc/senemos/userdata-update.conf"
+ internal_channel=$channel
+@@ -272,10 +303,18 @@ for file in etc/machine-id var/lib/dbus/machine-id var/lib/systemd/random-seed;
+     rm -f "$root/$file"
+ done
+ : > "$root/etc/machine-id"
++for tree in dev proc sys run; do
++    if findmnt --mountpoint "$root/$tree" --noheadings >/dev/null; then
++        echo 'Mounted runtime tree refused during offline finalization' >&2; exit 1
++    fi
++    find "$root/$tree" -xdev -mindepth 1 -depth -delete
++done
+ jq '. + {device_private_data_included:true,setup_input:"device-local-touch-reference",setup_input_physical_tested:false,
+     oem_firmware_included:true,redistribution_review_required:true,
+     touch_reference_validation:"shape and permissions only; physical acceptance is separate",
+     python_policy:"only byte-identical signature-verified original Fedora packages",
+     credentials_included:false,ssh_enabled:false}' /job/artifacts/manifest.json > /job/manifest.tmp
+ mv /job/manifest.tmp /job/artifacts/manifest.json
+-tar --create --numeric-owner --one-file-system --sort=name --acls --xattrs --xattrs-include=security.capability -f /job/rootfs.tar -C "$root" .
++# Keep standard tar end padding for libguestfs; buffer only the host file writes.
++tar --create --numeric-owner --one-file-system --sort=name --acls --xattrs --xattrs-include=security.capability -f - -C "$root" . |
++    dd of=/job/rootfs.tar bs=1M iflag=fullblock status=none
+diff --git a/tests/public-build-contract.sh b/tests/public-build-contract.sh
+index a60cbe4..8cdfbd1 100755
+--- a/tests/public-build-contract.sh
++++ b/tests/public-build-contract.sh
+@@ -37,12 +37,21 @@ for channel in stable testing unstable; do
+     public_main --build kernel --channel "$channel" --dry-run > "$fixture/plan"
+     grep -F 'kernel: Fedora Rawhide AArch64' "$fixture/plan" >/dev/null
+ done
+-for pair in '--mode bad' '--filesystem zfs' '--desktop xfce' '--channel latest' '--build plasma' '--jobs 0' '--jobs 9' '--linux-size 65537'; do
++for pair in '--mode bad' '--filesystem zfs' '--desktop xfce' '--channel latest' '--build plasma' '--jobs 0' '--jobs -1' '--j0' '--j4bad' '--jobs 01' '--linux-size 65537'; do
+     # Intentional fixture word splitting of fixed literal option/value pairs.
+     # shellcheck disable=SC2086
+     reject $pair --dry-run
+ done
+ reject --out '' --dry-run
++for choice in '--j4' '--j16' '--jobs 16' '--jobs=32'; do
++    # Intentional splitting of fixed CLI fixture strings.
++    # shellcheck disable=SC2086
++    public_main --dry-run $choice > "$fixture/jobs-plan"
++    case $choice in --j4) expected_jobs=4;; --jobs=32) expected_jobs=32;; *) expected_jobs=16;; esac
++    grep -F "$expected_jobs workers" "$fixture/jobs-plan" >/dev/null
++done
++public_main --dry-run > "$fixture/jobs-plan"
++grep -F "$(nproc) workers" "$fixture/jobs-plan" >/dev/null
+ reject --out '/tmp/unsafe:volume' --dry-run
+ reject --out '/tmp/unsafe,volume' --dry-run
+ reject --out --dry-run
